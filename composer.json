@@ -1,6 +1,6 @@
 {
     "name": "teilorbarcelos/auth-service-php",
-    "description": "Gold Standard PHP Slim 4 Backend",
+    "description": "Auth Service PHP Slim 4",
     "type": "project",
     "license": "MIT",
     "autoload": {
@@ -58,8 +58,8 @@
         }
     },
     "scripts": {
-        "start": "php -S 0.0.0.0:8888 -t public",
-        "dev": "php -S 0.0.0.0:8888 -t public",
+        "start": "php -S 0.0.0.0:8001 -t public",
+        "dev": "php -S 0.0.0.0:8001 -t public",
         "test": "phpunit",
         "lint": "phpstan analyse src"
     }
