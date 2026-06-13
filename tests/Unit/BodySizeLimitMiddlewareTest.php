@@ -59,7 +59,6 @@ final class BodySizeLimitMiddlewareTest extends TestCase
         $middleware = new BodySizeLimitMiddleware(2 * 1024 * 1024);
         $ref = new \ReflectionClass($middleware);
         $prop = $ref->getProperty('maxBytes');
-        $prop->setAccessible(true);
         $this->assertSame(2 * 1024 * 1024, $prop->getValue($middleware));
     }
 
@@ -71,7 +70,7 @@ final class BodySizeLimitMiddlewareTest extends TestCase
             $middleware = new BodySizeLimitMiddleware();
             $ref = new \ReflectionClass($middleware);
             $prop = $ref->getProperty('maxBytes');
-            $prop->setAccessible(true);
+
             $this->assertSame(5 * 1024 * 1024, $prop->getValue($middleware));
         } finally {
             if ($original === null) {
@@ -87,7 +86,6 @@ final class BodySizeLimitMiddlewareTest extends TestCase
         $middleware = new BodySizeLimitMiddleware(1024);
         $ref = new \ReflectionClass($middleware);
         $prop = $ref->getProperty('maxBytes');
-        $prop->setAccessible(true);
         $this->assertSame(1024, $prop->getValue($middleware));
     }
 
@@ -99,7 +97,7 @@ final class BodySizeLimitMiddlewareTest extends TestCase
             $middleware = new BodySizeLimitMiddleware();
             $ref = new \ReflectionClass($middleware);
             $prop = $ref->getProperty('maxBytes');
-            $prop->setAccessible(true);
+
             $this->assertSame(2 * 1024 * 1024 * 1024, $prop->getValue($middleware));
         } finally {
             if ($original === null) {
@@ -118,7 +116,7 @@ final class BodySizeLimitMiddlewareTest extends TestCase
             $middleware = new BodySizeLimitMiddleware();
             $ref = new \ReflectionClass($middleware);
             $prop = $ref->getProperty('maxBytes');
-            $prop->setAccessible(true);
+
             $this->assertSame(512 * 1024, $prop->getValue($middleware));
         } finally {
             if ($original === null) {
