@@ -10,7 +10,7 @@ class TrailingSlashMiddlewareTest extends WebTestCase
 {
     public function testRewriteTrailingSlashOnGet(): void
     {
-        $request = $this->createRequest('GET', '/v1/docs/');
+        $request = $this->createRequest('GET', '/health/');
         $response = $this->app->handle($request);
 
         $this->assertEquals(200, $response->getStatusCode());
@@ -18,7 +18,7 @@ class TrailingSlashMiddlewareTest extends WebTestCase
 
     public function testNoRewriteWithoutTrailingSlash(): void
     {
-        $request = $this->createRequest('GET', '/v1/docs');
+        $request = $this->createRequest('GET', '/health');
         $response = $this->app->handle($request);
 
         $this->assertEquals(200, $response->getStatusCode());

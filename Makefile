@@ -1,4 +1,4 @@
-.PHONY: dev watch test coverage generate storage-driver up down restart build logs shell migrate seed lint db-up db-down app-up migrate-dev migrate-status check-running metrics-up metrics-stop metrics-down
+.PHONY: dev watch test coverage up down restart build logs shell migrate seed lint db-up db-down app-up check-running sonar
 
 # Standardized commands
 dev: build
@@ -11,19 +11,11 @@ check-running:
 	@./scripts/check-status.sh
 
 test: check-running
-	docker compose exec -T app vendor/bin/phpunit --no-coverage
+	docker compose exec -T app php -d pcov.enabled=1 vendor/bin/phpunit --no-coverage
 
 coverage: check-running
 	docker compose exec -T app php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text --coverage-clover coverage/clover.xml
 	docker compose exec -T app php scripts/check-coverage.php
-
-# Example: make generate name=Product
-generate:
-	@php scripts/generate-module.php $(name)
-
-# Example: make storage-driver name=s3
-storage-driver:
-	@php scripts/install-storage.php $(name)
 
 # Helper / Infrastructure commands
 up:
@@ -57,29 +49,14 @@ lint: check-running
 	docker compose exec -T app vendor/bin/phpstan analyse --memory-limit=-1
 
 db-up:
-	docker compose up -d db redis rabbitmq
+	docker compose up -d db redis
 
 db-down:
-	docker compose stop db redis rabbitmq
+	docker compose stop db redis
 
 app-up:
 	docker compose up -d app
 
-migrate-dev: check-running
-	docker compose exec -T app vendor/bin/phinx create $(name)
-
-migrate-status: check-running
-	docker compose exec -T app vendor/bin/phinx status
-
-# Métricas (Prometheus & Grafana)
-metrics-up:
-	@echo "📈 Subindo stack de métricas (Prometheus & Grafana)..."
-	docker compose -f docker-compose.metrics.yml up -d
-
-metrics-stop:
-	@echo "🛑 Parando stack de métricas..."
-	docker compose -f docker-compose.metrics.yml stop
-
-metrics-down:
-	@echo "🗑️ Removendo stack de métricas..."
-	docker compose -f docker-compose.metrics.yml down
+sonar:
+	@echo "🔍 Rodando scan do SonarQube..."
+	./scripts/sonar-scan.sh "auth-service-php" "Auth Service PHP"

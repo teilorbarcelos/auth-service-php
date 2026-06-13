@@ -12,8 +12,10 @@ return function (RouteCollectorProxy $group) {
     $group->post('/login', AuthController::class . ':login');
     $group->post('/refresh', AuthController::class . ':refresh');
     $group->get('/me', AuthController::class . ':me')->add(AuthMiddleware::class);
+    $group->post('/logout', AuthController::class . ':logout')->add(AuthMiddleware::class);
+    $group->get('/.well-known/jwks.json', AuthController::class . ':jwks');
 
     $group->post('/password/request', AuthController::class . ':requestPasswordReset');
     $group->post('/password/validate', AuthController::class . ':validateResetToken');
-    $group->post('/password/change', AuthController::class . ':resetPassword');
+    $group->post('/password/change', AuthController::class . ':changePassword');
 };

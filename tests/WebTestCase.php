@@ -50,15 +50,6 @@ abstract class WebTestCase extends TestCase
 
     protected function setUpDatabase(): void
     {
-        $db = \Illuminate\Database\Capsule\Manager::connection();
-        if ($db->getDriverName() === 'sqlite') {
-            try {
-                $db->statement("ATTACH DATABASE ':memory:' AS audit");
-            } catch (\Exception $e) {
-                // Already attached
-            }
-        }
-
         $schema = \Illuminate\Database\Capsule\Manager::schema();
 
         // Drop existing tables in correct order (children first)
@@ -67,9 +58,6 @@ abstract class WebTestCase extends TestCase
         $schema->dropIfExists('auth');
         $schema->dropIfExists('roles');
         $schema->dropIfExists('features');
-        $schema->dropIfExists('products');
-        $schema->dropIfExists('audit.tb_audit');
-        $schema->dropIfExists('audit.tb_error_log');
 
         $schema->create('roles', function ($table) {
             $table->string('id')->primary();
@@ -122,44 +110,6 @@ abstract class WebTestCase extends TestCase
             $table->integer('retries')->default(0);
             $table->boolean('first_access')->default(true);
             $table->boolean('active')->default(true);
-            $table->timestamps();
-        });
-
-        $schema->create('audit.tb_audit', function ($table) {
-            $table->uuid('id')->primary();
-            $table->string('id_user')->nullable();
-            $table->string('user_name')->nullable();
-            $table->string('action_type')->nullable();
-            $table->string('table_name')->nullable();
-            $table->json('diff_value')->nullable();
-            $table->json('raw')->nullable();
-            $table->string('ip')->nullable();
-            $table->string('method')->nullable();
-            $table->string('original_url')->nullable();
-            $table->timestamp('created_at')->useCurrent();
-        });
-
-        $schema->create('audit.tb_error_log', function ($table) {
-            $table->uuid('id')->primary();
-            $table->uuid('id_user')->nullable();
-            $table->string('source')->nullable();
-            $table->text('error_message')->nullable();
-            $table->json('error_data')->nullable();
-            $table->timestamp('created_at')->useCurrent();
-        });
-
-        $schema->create('products', function ($table) {
-            $table->uuid('id')->primary();
-            $table->uuid('id_user')->nullable();
-            $table->string('sku')->unique();
-            $table->string('name');
-            $table->string('description')->nullable();
-            $table->decimal('price', 10, 2);
-            $table->string('category')->nullable();
-            $table->integer('stock')->default(0);
-            $table->boolean('active')->default(true);
-            $table->boolean('is_deleted')->default(false);
-            $table->timestamp('deleted_at')->nullable();
             $table->timestamps();
         });
     }
@@ -245,27 +195,13 @@ abstract class WebTestCase extends TestCase
 
         $containerBuilder->addDefinitions([
             \Redis::class => $redisFake,
-            \App\Infrastructure\Email\EmailProvider::class => $this->createMock(\App\Infrastructure\Email\EmailProvider::class),
             \Psr\Log\LoggerInterface::class => $this->createMock(\Psr\Log\LoggerInterface::class),
-            \App\Infrastructure\Metrics\MetricService::class => function () {
-                return new \App\Infrastructure\Metrics\MetricService([], new \Prometheus\Storage\InMemory());
-            }
         ]);
 
         $container = $containerBuilder->build();
 
         // Initialize DB connection once
         $container->get('db');
-
-        // Wire audit observer via container (replaces old static observe in BaseModel::boot)
-        try {
-            $observer = $container->get(\App\Modules\Audit\AuditObserver::class);
-            foreach ([\App\Modules\User\User::class, \App\Modules\Product\Product::class, \App\Modules\Role\Role::class, \App\Modules\Feature\Feature::class] as $modelClass) {
-                $modelClass::observe($observer);
-            }
-        } catch (\Exception $e) {
-            error_log("AuditObserver init failed: " . $e->getMessage());
-        }
 
         AppFactory::setContainer($container);
         $app = AppFactory::create();
@@ -303,14 +239,6 @@ abstract class WebTestCase extends TestCase
         return $tokens['token'];
     }
 
-    /**
-     * @param string $method
-     * @param string $path
-     * @param array<string, string> $headers
-     * @param array<string, string> $cookies
-     * @param array<string, mixed> $serverParams
-     * @return ServerRequestInterface
-     */
     protected function createRequest(
         string $method,
         string $path,
@@ -328,13 +256,6 @@ abstract class WebTestCase extends TestCase
         return $request->withCookieParams($cookies);
     }
 
-    /**
-     * @param string $method
-     * @param string $path
-     * @param array<string, mixed>|null $body
-     * @param array<string, string> $headers
-     * @return ResponseInterface
-     */
     protected function request(
         string $method,
         string $path,

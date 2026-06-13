@@ -12,7 +12,7 @@ ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 
-// Load environment variables (immutable — não sobrescreve env do sistema)
+// Load environment variables (immutable)
 if (file_exists(__DIR__ . '/../.env')) {
     require_once __DIR__ . '/../scripts/load-env.php';
     loadEnvironment(__DIR__ . '/../');
@@ -30,22 +30,11 @@ AppFactory::setContainer($container);
 $app = AppFactory::create();
 
 // Initialize DB connection and seed admin user (idempotent check)
-// Runs once per process start; Database connections are lazy on first access.
 try {
     $container->get('db');
     \App\Core\DatabaseBootstrap::init();
 } catch (\Exception $e) {
     error_log("Init failed: " . $e->getMessage());
-}
-
-// Wire async audit observer (via container, não mais via boot estático em BaseModel)
-try {
-    $observer = $container->get(\App\Modules\Audit\AuditObserver::class);
-    foreach ([\App\Modules\User\User::class, \App\Modules\Product\Product::class, \App\Modules\Role\Role::class, \App\Modules\Feature\Feature::class] as $modelClass) {
-        $modelClass::observe($observer);
-    }
-} catch (\Exception $e) {
-    error_log("AuditObserver init failed: " . $e->getMessage());
 }
 
 // Register routes
@@ -58,7 +47,7 @@ $app->addBodyParsingMiddleware();
 $app->addRoutingMiddleware();
 $app->add(App\Middleware\TrailingSlashMiddleware::class);
 
-// 3. Outermost: Structured Logging
+// Outermost: Structured Logging
 $app->add(App\Middleware\LogMiddleware::class);
 
 // Standard Slim Error Middleware
@@ -70,7 +59,7 @@ $app->addErrorMiddleware(
 
 $app->add(App\Middleware\RateLimitMiddleware::class);
 
-// 4. ABSOLUTE OUTERMOST: CORS (Must be last to wrap EVERYTHING including error responses)
+// ABSOLUTE OUTERMOST: CORS (Must be last to wrap EVERYTHING including error responses)
 $app->add(App\Middleware\CorsMiddleware::class);
 
 $app->run();

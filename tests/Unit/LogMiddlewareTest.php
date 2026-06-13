@@ -4,79 +4,92 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Core\Helpers\IpHelper;
 use App\Infrastructure\Log\RequestIdProcessor;
-use App\Infrastructure\Metrics\MetricService;
 use App\Middleware\LogMiddleware;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\UriInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 
-final class LogMiddlewareTest extends TestCase
+class LogMiddlewareTest extends TestCase
 {
-    public function testRequestIdIsResetAfterRequest(): void
+    public function testProcessSetsRequestIdAndLogs(): void
     {
-        $processor = new RequestIdProcessor();
-        $middleware = new LogMiddleware(
-            new NullLogger(),
-            $this->createMock(MetricService::class),
-            $processor
-        );
+        $logger = $this->createMock(LoggerInterface::class);
+        $requestIdProcessor = new RequestIdProcessor();
+
+        $middleware = new LogMiddleware($logger, $requestIdProcessor);
+
+        $uri = $this->createMock(UriInterface::class);
+        $uri->method('getPath')->willReturn('/test');
+        $uri->method('__toString')->willReturn('http://localhost/test');
 
         $request = $this->createMock(ServerRequestInterface::class);
         $request->method('getMethod')->willReturn('GET');
-        $request->method('getUri')->willReturn(new \Slim\Psr7\Uri('http', 'localhost', null, '/test'));
-        $request->method('getHeaderLine')->willReturn('');
+        $request->method('getUri')->willReturn($uri);
+        $request->method('getHeaderLine')->with('User-Agent')->willReturn('test-agent');
+        $request->method('getServerParams')->willReturn(['REMOTE_ADDR' => '127.0.0.1']);
 
         $response = $this->createMock(ResponseInterface::class);
         $response->method('getStatusCode')->willReturn(200);
-        $response->method('withHeader')->willReturnSelf();
 
         $handler = $this->createMock(RequestHandlerInterface::class);
-        $handler->method('handle')->willReturn($response);
+        $handler->expects($this->once())
+            ->method('handle')
+            ->with($request)
+            ->willReturn($response);
 
-        $this->assertNull($this->readRequestId($processor));
+        $logger->expects($this->once())
+            ->method('info')
+            ->with('Request processed', $this->callback(function ($context) {
+                return isset($context['method'], $context['url'], $context['status'], $context['duration_ms'], $context['ip'], $context['user_agent'])
+                    && $context['method'] === 'GET'
+                    && $context['status'] === 200
+                    && $context['user_agent'] === 'test-agent';
+            }));
 
-        $middleware->process($request, $handler);
+        $response->expects($this->once())
+            ->method('withHeader')
+            ->with('X-Request-ID', $this->isType('string'))
+            ->willReturn($response);
 
-        $this->assertNull($this->readRequestId($processor));
+        $result = $middleware->process($request, $handler);
+        $this->assertSame($response, $result);
     }
 
-    public function testRequestIdIsResetEvenWhenHandlerThrows(): void
+    public function testProcessHandlesExceptionAndResetsRequestId(): void
     {
-        $processor = new RequestIdProcessor();
-        $middleware = new LogMiddleware(
-            new NullLogger(),
-            $this->createMock(MetricService::class),
-            $processor
-        );
+        $logger = $this->createMock(LoggerInterface::class);
+        $requestIdProcessor = new RequestIdProcessor();
+        $requestIdProcessor->setRequestId('before');
+
+        $middleware = new LogMiddleware($logger, $requestIdProcessor);
+
+        $uri = $this->createMock(UriInterface::class);
+        $uri->method('getPath')->willReturn('/error');
+        $uri->method('__toString')->willReturn('http://localhost/error');
 
         $request = $this->createMock(ServerRequestInterface::class);
-        $request->method('getMethod')->willReturn('GET');
-        $request->method('getUri')->willReturn(new \Slim\Psr7\Uri('http', 'localhost', null, '/test'));
-        $request->method('getHeaderLine')->willReturn('');
+        $request->method('getMethod')->willReturn('POST');
+        $request->method('getUri')->willReturn($uri);
+        $request->method('getHeaderLine')->with('User-Agent')->willReturn('');
+        $request->method('getServerParams')->willReturn(['REMOTE_ADDR' => '127.0.0.1']);
 
         $handler = $this->createMock(RequestHandlerInterface::class);
-        $handler->method('handle')->willThrowException(new \RuntimeException('boom'));
+        $handler->expects($this->once())
+            ->method('handle')
+            ->willThrowException(new \RuntimeException('fail'));
 
-        try {
-            $middleware->process($request, $handler);
-            $this->fail('Exception expected');
-        } catch (\RuntimeException $e) {
-            $this->assertSame('boom', $e->getMessage());
-        }
+        $logger->expects($this->once())
+            ->method('info')
+            ->with('Request processed', $this->callback(function ($context) {
+                return $context['status'] === 500;
+            }));
 
-        $this->assertNull($this->readRequestId($processor));
-    }
-
-    private function readRequestId(RequestIdProcessor $processor): ?string
-    {
-        $ref = new \ReflectionClass($processor);
-        $prop = $ref->getProperty('requestId');
-        $prop->setAccessible(true);
-        $value = $prop->getValue($processor);
-        return is_string($value) ? $value : null;
+        $this->expectException(\RuntimeException::class);
+        $middleware->process($request, $handler);
     }
 }

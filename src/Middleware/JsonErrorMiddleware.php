@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Middleware;
 
-use App\Infrastructure\Audit\ErrorAuditService;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -14,12 +13,6 @@ use Slim\Psr7\Response;
 
 class JsonErrorMiddleware implements MiddlewareInterface
 {
-    public function __construct(
-        private readonly ErrorAuditService $errorAudit,
-        private \App\Infrastructure\Metrics\MetricService $metricService,
-    ) {
-    }
-
     private const CONTENT_TYPE_JSON = 'application/json';
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -27,8 +20,6 @@ class JsonErrorMiddleware implements MiddlewareInterface
         try {
             return $handler->handle($request);
         } catch (\App\Core\Exceptions\ValidationException $e) {
-            $this->metricService->incrementCounter('exceptions_total', ['type'], [$this->getExceptionType($e)]);
-            $this->errorAudit->auditError($request, $e, 'VALIDATION_ERROR', ['validation_errors' => $e->getErrors()]);
             $response = new Response();
             $payload = [
                 'success' => false,
@@ -41,8 +32,6 @@ class JsonErrorMiddleware implements MiddlewareInterface
             $response->getBody()->write((string) json_encode($payload));
             $finalResponse = $response->withStatus(400);
         } catch (HttpException $e) {
-            $this->metricService->incrementCounter('exceptions_total', ['type'], [$this->getExceptionType($e)]);
-            $this->errorAudit->auditError($request, $e, 'HTTP_ERROR');
             $response = new Response();
             if ($e->getCode() === 401) {
                 $payload = [
@@ -63,8 +52,6 @@ class JsonErrorMiddleware implements MiddlewareInterface
             $response->getBody()->write((string) json_encode($payload));
             $finalResponse = $response->withStatus($e->getCode());
         } catch (\Throwable $e) {
-            $this->metricService->incrementCounter('exceptions_total', ['type'], [$this->getExceptionType($e)]);
-            $this->errorAudit->auditError($request, $e, 'SERVER_ERROR');
             $response = new Response();
             $statusCode = 500;
             $code = $e->getCode();
@@ -95,10 +82,5 @@ class JsonErrorMiddleware implements MiddlewareInterface
         }
 
         return $finalResponse->withHeader('Content-Type', self::CONTENT_TYPE_JSON);
-    }
-
-    private function getExceptionType(\Throwable $e): string
-    {
-        return (new \ReflectionClass($e))->getShortName();
     }
 }

@@ -6,8 +6,6 @@ namespace App\Middleware;
 
 use App\Core\Helpers\IpHelper;
 use App\Infrastructure\Log\RequestIdProcessor;
-use App\Infrastructure\Metrics\MetricService;
-use Monolog\LogRecord;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\MiddlewareInterface;
@@ -18,7 +16,6 @@ class LogMiddleware implements MiddlewareInterface
 {
     public function __construct(
         private LoggerInterface $logger,
-        private MetricService $metricService,
         private RequestIdProcessor $requestIdProcessor
     ) {}
 
@@ -49,19 +46,8 @@ class LogMiddleware implements MiddlewareInterface
                 'ip' => IpHelper::getClientIp($request),
                 'user_agent' => $request->getHeaderLine('User-Agent'),
             ]);
-
-            $this->metricService->incrementCounter('http_requests_total',
-                ['method', 'status', 'path'],
-                [$method, (string)$status, $path]
-            );
-
-            $this->metricService->recordTimer('http_request_duration_ms', $durationMs,
-                ['method', 'path'],
-                [$method, $path]
-            );
         }
 
         return $response->withHeader('X-Request-ID', $requestId);
     }
-
 }
