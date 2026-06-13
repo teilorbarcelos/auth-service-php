@@ -32,14 +32,12 @@ class AuthServiceTest extends WebTestCase
         $this->redisMock->method('srem')->willReturn(1);
         
         $jwtService = new JwtService($this->redisMock);
-        $emailProviderMock = $this->createMock(\App\Infrastructure\Email\EmailProvider::class);
-        $this->authService = new AuthService($jwtService, $emailProviderMock);
+        $this->authService = new AuthService($jwtService, $this->redisMock);
     }
 
     public function testLoginSuccess(): void
     {
         $userId = (string) \Illuminate\Support\Str::uuid();
-        // Setup user
         $user = User::create([
             'id' => $userId,
             'name' => 'Test User',
@@ -54,7 +52,6 @@ class AuthServiceTest extends WebTestCase
             'first_access' => false
         ]);
 
-        /** @var array{user: array{email: string}} $result */
         $result = $this->authService->login('test@example.com', 'password123');
 
         $this->assertArrayHasKey('token', $result);
@@ -64,7 +61,7 @@ class AuthServiceTest extends WebTestCase
     public function testLoginInvalidUser(): void
     {
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid credentials');
+        $this->expectExceptionMessage('Invalid email or password');
         $this->expectExceptionCode(401);
 
         $this->authService->login('nonexistent@example.com', 'password');
@@ -87,7 +84,7 @@ class AuthServiceTest extends WebTestCase
         ]);
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid credentials');
+        $this->expectExceptionMessage('Invalid email or password');
         $this->expectExceptionCode(401);
 
         $this->authService->login('test2@example.com', 'wrongpassword');
@@ -110,8 +107,8 @@ class AuthServiceTest extends WebTestCase
         ]);
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Account is disabled');
-        $this->expectExceptionCode(403);
+        $this->expectExceptionMessage('Invalid email or password');
+        $this->expectExceptionCode(401);
 
         $this->authService->login('disabled@example.com', 'password123');
     }
@@ -140,8 +137,8 @@ class AuthServiceTest extends WebTestCase
         ]);
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Role is disabled');
-        $this->expectExceptionCode(403);
+        $this->expectExceptionMessage('Invalid email or password');
+        $this->expectExceptionCode(401);
 
         $this->authService->login('disabledrole@example.com', 'password123');
     }
@@ -157,7 +154,6 @@ class AuthServiceTest extends WebTestCase
             'active' => true
         ]);
 
-        /** @var array{user: array{email: string}} $result */
         $result = $this->authService->getMe($userId);
         $this->assertEquals('me@example.com', $result['user']['email']);
     }
@@ -170,7 +166,6 @@ class AuthServiceTest extends WebTestCase
         \App\Modules\Role\Role::create(['id' => $roleId, 'name' => 'Manager']);
         \App\Modules\Feature\Feature::create(['id' => $featureId, 'name' => 'Feature X']);
         
-        // Setup pivot data
         \Illuminate\Database\Capsule\Manager::table('role_features')->insert([
             'id_role' => $roleId,
             'id_feature' => $featureId,
@@ -191,7 +186,6 @@ class AuthServiceTest extends WebTestCase
             'password' => password_hash('pass', PASSWORD_DEFAULT)
         ]);
 
-        /** @var array{user: array{email: string, role: array{permissions: array<int, array{feature: string, view: bool, create: bool}>}}} $result */
         $result = $this->authService->login('manager@test.com', 'pass');
 
         $this->assertCount(1, $result['user']['role']['permissions']);
@@ -279,10 +273,9 @@ class AuthServiceTest extends WebTestCase
             'id_role' => 'user',
             'active' => true
         ]);
-        // Note: No UserAuth created
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid credentials');
+        $this->expectExceptionMessage('Invalid email or password');
         $this->authService->login('noauth@example.com', 'pass');
     }
 

@@ -12,21 +12,12 @@ use Redis;
 class HealthController
 {
     private const CONTENT_TYPE = 'application/json';
-    private const CACHE_TTL = 5;
 
     public function __construct(
         private DB $db,
         private Redis $redis,
-        private \App\Infrastructure\Messaging\RabbitMQProvider $rabbit,
-        private \App\Infrastructure\Storage\StorageProvider $storage,
         private \Psr\Log\LoggerInterface $logger
     ) {}
-
-    public function __invoke(Request $request, Response $response): Response
-    {
-        $result = $this->ready($request, $response);
-        return $result->withHeader('X-Health-Source', 'invoke');
-    }
 
     public function live(Request $request, Response $response): Response
     {
@@ -44,28 +35,8 @@ class HealthController
 
     public function ready(Request $request, Response $response): Response
     {
-        $isTesting = ($_ENV['APP_ENV'] ?? '') === 'testing';
-
-        if (!$isTesting) {
-            $cached = $this->getCachedResult();
-            if ($cached !== null) {
-                $cached['path'] = $request->getUri()->getPath();
-                $json = json_encode($cached, JSON_UNESCAPED_UNICODE);
-                $response->getBody()->write($json ?: '{}');
-                /** @var mixed $httpStatus */
-                $httpStatus = $cached['http_status'] ?? null;
-                return $response
-                    ->withHeader('Content-Type', self::CONTENT_TYPE)
-                    ->withStatus(is_int($httpStatus) ? $httpStatus : 200);
-            }
-        }
-
         $checks = $this->runChecks();
         $result = $this->buildResult($checks);
-
-        if (!$isTesting) {
-            $this->redis->setex('health:probe', self::CACHE_TTL, json_encode($result));
-        }
 
         $flags = JSON_UNESCAPED_UNICODE;
         if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {
@@ -74,38 +45,20 @@ class HealthController
         $result['path'] = $request->getUri()->getPath();
         $json = json_encode($result, $flags);
         $response->getBody()->write($json ?: '{}');
-        /** @var mixed $httpStatus */
         $httpStatus = $result['http_status'] ?? null;
         return $response
             ->withHeader('Content-Type', self::CONTENT_TYPE)
             ->withStatus(is_int($httpStatus) ? $httpStatus : 200);
     }
 
-    /** @return array<string, mixed>|null */
-    private function getCachedResult(): ?array
-    {
-        /** @var mixed $cached */
-        $cached = $this->redis->get('health:probe');
-        if (!is_string($cached)) {
-            return null;
-        }
-        $decoded = json_decode($cached, true);
-        return is_array($decoded) ? $decoded : null;
-    }
-
-    /** @return array<string, array<string, string>> */
     private function runChecks(): array
     {
         $checks = [];
         $checks['database'] = $this->checkDatabase();
         $checks['redis'] = $this->checkRedis();
-        $checks['rabbitmq'] = $this->checkRabbitMQ();
-        $checks['storage'] = $this->checkStorage();
         return $checks;
     }
 
-    /** @param array<string, array<string, string>> $checks
-     * @return array<string, mixed> */
     private function buildResult(array $checks): array
     {
         $status = 'UP';
@@ -116,18 +69,6 @@ class HealthController
                     'check' => $name,
                     'message' => $check['message']
                 ]);
-
-                try {
-                    \App\Modules\Audit\ErrorLog::create([
-                        'source' => 'DEGRADED',
-                        'error_message' => $check['message'],
-                        'error_data' => [
-                            'check' => $name,
-                            'message' => $check['message']
-                        ]
-                    ]);
-                } catch (\Exception $e) {
-                }
             }
         }
 
@@ -145,7 +86,6 @@ class HealthController
         ];
     }
 
-    /** @return array<string, string> */
     private function checkDatabase(): array
     {
         try {
@@ -156,45 +96,11 @@ class HealthController
         }
     }
 
-    /** @return array<string, string> */
     private function checkRedis(): array
     {
         try {
             $this->redis->ping();
             return ['status' => 'OK', 'message' => 'Connected'];
-        } catch (\Exception $e) {
-            return ['status' => 'ERROR', 'message' => $e->getMessage()];
-        }
-    }
-
-    /** @return array<string, string> */
-    private function checkRabbitMQ(): array
-    {
-        if (($_ENV['MESSAGING_ENABLED'] ?? 'false') !== 'true') {
-            return ['status' => 'DISABLED', 'message' => 'Messaging is disabled in settings'];
-        }
-
-        try {
-            $this->rabbit->connect();
-            return ['status' => 'OK', 'message' => 'Connected'];
-        } catch (\Exception $e) {
-            return ['status' => 'ERROR', 'message' => $e->getMessage()];
-        }
-    }
-
-    /** @return array<string, string> */
-    private function checkStorage(): array
-    {
-        try {
-            $testFile = '.health_check_temp';
-            $this->storage->put($testFile, 'health-check');
-
-            if (!$this->storage->exists($testFile)) {
-                 throw new \RuntimeException("Storage write failed: file not found after put");
-            }
-
-            $this->storage->delete($testFile);
-            return ['status' => 'OK', 'message' => 'Writable'];
         } catch (\Exception $e) {
             return ['status' => 'ERROR', 'message' => $e->getMessage()];
         }

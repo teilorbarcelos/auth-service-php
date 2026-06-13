@@ -44,16 +44,6 @@ try {
     error_log("Init failed: " . $e->getMessage());
 }
 
-// Wire async audit observer (via container, não mais via boot estático em BaseModel)
-try {
-    $observer = $container->get(\App\Modules\Audit\AuditObserver::class);
-    foreach ([\App\Modules\User\User::class, \App\Modules\Product\Product::class, \App\Modules\Role\Role::class, \App\Modules\Feature\Feature::class] as $modelClass) {
-        $modelClass::observe($observer);
-    }
-} catch (\Exception $e) {
-    error_log("AuditObserver init failed: " . $e->getMessage());
-}
-
 // Register routes
 $routes = require __DIR__ . '/../config/routes.php';
 $routes($app);

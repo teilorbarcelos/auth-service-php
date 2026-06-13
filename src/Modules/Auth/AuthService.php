@@ -7,8 +7,7 @@ namespace App\Modules\Auth;
 use App\Modules\User\User;
 use App\Modules\User\UserAuth;
 use App\Infrastructure\Auth\JwtService;
-use App\Infrastructure\Email\EmailProvider;
-use App\Infrastructure\Email\EmailTemplates;
+use App\Infrastructure\Auth\UserSession;
 use App\Core\Traits\ValidatableTrait;
 use Respect\Validation\Validator as v;
 
@@ -18,16 +17,10 @@ class AuthService
     const USER_NOT_FOUND = 'User not found';
     public function __construct(
         private JwtService $jwtService,
-        private EmailProvider $emailProvider,
         private readonly ?\Redis $redis = null,
     ) {
     }
 
-    /**
-     * @param string $email
-     * @param string $password
-     * @return array<string, mixed>
-     */
     public function login(string $email, string $password): array
     {
         $this->validate(['email' => $email, 'password' => $password], [
@@ -38,28 +31,24 @@ class AuthService
         $user = User::with(['role', 'role.features'])->where('email', $email)->first();
 
         if (!$user instanceof User) {
-            throw new \InvalidArgumentException('Invalid credentials', 401);
+            throw new \InvalidArgumentException('Invalid email or password', 401);
         }
 
         if (!$user->auth instanceof \App\Modules\User\UserAuth || !password_verify($password, (string) $user->auth->password)) {
-            throw new \InvalidArgumentException('Invalid credentials', 401);
+            throw new \InvalidArgumentException('Invalid email or password', 401);
         }
 
         if (!$user->active) {
-            throw new \DomainException('Account is disabled', 403);
+            throw new \InvalidArgumentException('Invalid email or password', 401);
         }
 
         if ($user->role instanceof \App\Modules\Role\Role && !$user->role->active) {
-            throw new \DomainException('Role is disabled', 403);
+            throw new \InvalidArgumentException('Invalid email or password', 401);
         }
 
         return $this->createAuthResponse($user, 'Login successful');
     }
 
-    /**
-     * @param string $userId
-     * @return array<string, mixed>
-     */
     public function getMe(string $userId): array
     {
         $user = User::with(['role', 'role.features'])->find($userId);
@@ -70,10 +59,6 @@ class AuthService
         return $this->createAuthResponse($user, 'User found');
     }
 
-    /**
-     * @param string $refreshToken
-     * @return array<string, mixed>
-     */
     public function refreshToken(string $refreshToken): array
     {
         $claims = $this->jwtService->validateToken($refreshToken);
@@ -94,15 +79,11 @@ class AuthService
         return $this->getMe($uid);
     }
 
-    /**
-     * @param string $email
-     * @return void
-     */
-    public function requestPasswordReset(string $email): void
+    public function requestPasswordReset(string $email): string
     {
         $user = User::where('email', $email)->first();
         if (!$user instanceof User || !$user->auth instanceof \App\Modules\User\UserAuth) {
-            return;
+            return '';
         }
 
         $token = (string) random_int(100000, 999999);
@@ -113,19 +94,9 @@ class AuthService
             'request_password_expiration' => $expiration->format('Y-m-d H:i:s')
         ]);
 
-        $html = EmailTemplates::render(EmailTemplates::FORGOT_PASSWORD_TEMPLATE, [
-            'name' => $user->name,
-            'token' => $token
-        ]);
-
-        $this->emailProvider->sendEmail($email, 'Recuperação de Senha', $html);
+        return $token;
     }
 
-    /**
-     * @param string $email
-     * @param string $token
-     * @return bool
-     */
     public function validateResetToken(string $email, string $token): bool
     {
         $user = User::where('email', $email)->first();
@@ -145,22 +116,14 @@ class AuthService
         return true;
     }
 
-    /**
-     * @param string $email
-     * @param string $token
-     * @param string $newPassword
-     * @return void
-     */
-    public function resetPassword(string $email, string $token, string $newPassword): void
+    public function changePassword(string $email, string $token, string $newPassword): void
     {
         $this->validateResetToken($email, $token);
 
         $user = User::where('email', $email)->first();
-        // @codeCoverageIgnoreStart
         if (!$user instanceof User || !$user->auth instanceof UserAuth) {
             throw new \DomainException(self::USER_NOT_FOUND, 404);
         }
-        // @codeCoverageIgnoreEnd
 
         $user->auth->update([
             'password' => password_hash($newPassword, PASSWORD_DEFAULT),
@@ -172,10 +135,12 @@ class AuthService
         $this->jwtService->bumpSessionVersion($user->id);
     }
 
-    /**
-     * @param User $user
-     * @return array<int, array<string, mixed>>
-     */
+    public function logout(string $userId): void
+    {
+        $this->jwtService->invalidateUserTokens($userId);
+        UserSession::resetInstance();
+    }
+
     private function getFormattedPermissions(User $user): array
     {
         if (!$user->role instanceof \App\Modules\Role\Role)
@@ -222,11 +187,6 @@ class AuthService
         return $result;
     }
 
-    /**
-     * @param User $user
-     * @param string $message
-     * @return array<string, mixed>
-     */
     private function createAuthResponse(User $user, string $message): array
     {
         $permissions = $this->getFormattedPermissions($user);

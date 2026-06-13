@@ -10,17 +10,6 @@ return [
         $provider = \App\Infrastructure\Database\DatabaseProvider::getInstance();
         $capsule = $provider->getCapsule();
 
-        $provider->listenQueryExecuted(
-            function (\Illuminate\Database\Events\QueryExecuted $event) use ($container) {
-                try {
-                    $metricService = $container->get(\App\Infrastructure\Metrics\MetricService::class);
-                    $metricService->incrementCounter('database_queries_total');
-                } catch (\Throwable $e) {
-                    // Do not fail the request if metrics tracking fails
-                }
-            }
-        );
-
         return $capsule;
     },
 
@@ -61,35 +50,12 @@ return [
         return $logger;
     },
 
-    \App\Infrastructure\Metrics\MetricService::class => function (ContainerInterface $container) {
-        return new \App\Infrastructure\Metrics\MetricService([
-            'host' => getenv('REDIS_HOST') ?: 'redis',
-            'port' => getenv('REDIS_PORT') ?: 6379,
-            'persistent_connections' => true,
-        ]);
-    },
-
     // Services
-    \App\Modules\Audit\AuditObserver::class => \DI\autowire(),
-    \App\Infrastructure\Audit\ErrorAuditService::class => \DI\autowire(),
-    \App\Infrastructure\Email\EmailProvider::class => \DI\autowire(),
-    \App\Infrastructure\Messaging\RabbitMQProvider::class => \DI\autowire(),
-    \App\Infrastructure\Storage\StorageProvider::class => \DI\autowire(),
     \App\Infrastructure\Auth\JwtService::class => \DI\autowire()->constructorParameter('logger', \DI\get(\Psr\Log\LoggerInterface::class)),
     \App\Modules\Auth\AuthService::class => \DI\autowire(),
-    \App\Modules\User\UserService::class => \DI\autowire(),
     \App\Modules\User\UserRepository::class => \DI\autowire(),
-    \App\Modules\Product\ProductService::class => \DI\autowire(),
-    \App\Modules\Product\ProductRepository::class => \DI\autowire(),
-    \App\Modules\Feature\FeatureService::class => \DI\autowire(),
     \App\Modules\Feature\FeatureRepository::class => \DI\autowire(),
-    \App\Modules\Role\RoleService::class => \DI\autowire(),
     \App\Modules\Role\RoleRepository::class => \DI\autowire(),
-    \App\Modules\Metrics\MetricsController::class => \DI\autowire(),
-    \App\Infrastructure\Pdf\PdfProviderInterface::class => \DI\get(\App\Infrastructure\Pdf\RemotePdfProvider::class),
-    \App\Infrastructure\Pdf\RemotePdfProvider::class => \DI\autowire(),
-    \App\Modules\Dashboard\DashboardController::class => \DI\autowire(),
-    \App\Modules\Dashboard\DashboardService::class => \DI\autowire(),
     // [GENERATOR_SERVICES]
 
     // Middlewares

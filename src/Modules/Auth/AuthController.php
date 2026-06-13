@@ -9,7 +9,6 @@ use App\Modules\Auth\AuthService;
 use App\Core\Exceptions\BadRequestException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use OpenApi\Attributes as OA;
 
 class AuthController extends BaseController
 {
@@ -17,23 +16,6 @@ class AuthController extends BaseController
         private AuthService $authService
     ) {}
 
-    #[OA\Post(
-        path: "/auth/login",
-        summary: "Authenticate user and get token",
-        tags: ["Auth"],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(ref: "#/components/schemas/LoginRequest")
-        ),
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: "Login successful",
-                content: new OA\JsonContent(ref: "#/components/schemas/LoginResponse")
-            ),
-            new OA\Response(response: 401, description: "Invalid credentials")
-        ]
-    )]
     public function login(Request $request, Response $response): Response
     {
         $body = $this->getJsonBody($request);
@@ -48,53 +30,16 @@ class AuthController extends BaseController
         return $this->jsonResponse($response, $result);
     }
 
-    #[OA\Get(
-        path: "/auth/me",
-        summary: "Get current logged user info",
-        tags: ["Auth"],
-        security: [["bearerAuth" => []]],
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: "User info found",
-                content: new OA\JsonContent(ref: "#/components/schemas/UserAuthInfo")
-            )
-        ]
-    )]
     public function me(Request $request, Response $response): Response
     {
         $userId = $request->getAttribute('userId');
         if (!is_string($userId) && !is_numeric($userId)) {
-            // @codeCoverageIgnoreStart
             throw new BadRequestException('Invalid user ID type');
-            // @codeCoverageIgnoreEnd
         }
         $result = $this->authService->getMe((string)$userId);
         return $this->jsonResponse($response, $result);
     }
 
-    #[OA\Post(
-        path: "/auth/refresh",
-        summary: "Refresh session token",
-        tags: ["Auth"],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ["refreshToken"],
-                properties: [
-                    new OA\Property(property: "refreshToken", type: "string")
-                ]
-            )
-        ),
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: "Token refreshed successfuly",
-                content: new OA\JsonContent(ref: "#/components/schemas/LoginResponse")
-            ),
-            new OA\Response(response: 401, description: "Invalid or expired refresh token")
-        ]
-    )]
     public function refresh(Request $request, Response $response): Response
     {
         $body = $this->getJsonBody($request);
@@ -107,36 +52,40 @@ class AuthController extends BaseController
         return $this->jsonResponse($response, $result);
     }
 
-    /**
-     * @param Request $request
-     * @param Response $response
-     * @return Response
-     */
-    #[OA\Post(path: '/v1/auth/password/request', summary: 'Request Password Reset', tags: ['Auth'])]
-    #[OA\RequestBody(required: true, content: new OA\JsonContent(properties: [new OA\Property(property: 'email', type: 'string')]))]
-    #[OA\Response(response: 200, description: 'Email sent')]
+    public function logout(Request $request, Response $response): Response
+    {
+        $userId = $request->getAttribute('userId');
+        if (!is_string($userId) && !is_numeric($userId)) {
+            throw new BadRequestException('Invalid user ID type');
+        }
+        $this->authService->logout((string)$userId);
+        return $this->jsonResponse($response, [
+            'message' => 'Logout successful',
+            'valid' => true,
+        ]);
+    }
+
+    public function jwks(Request $request, Response $response): Response
+    {
+        $payload = json_encode(['keys' => []]);
+        $response->getBody()->write($payload ?: '{}');
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
     public function requestPasswordReset(Request $request, Response $response): Response
     {
         $body = (array)$request->getParsedBody();
         $email = (string)($body['email'] ?? '');
 
-        $this->authService->requestPasswordReset($email);
+        $token = $this->authService->requestPasswordReset($email);
 
-        $response->getBody()->write((string)json_encode(['message' => 'E-mail de recuperação enviado com sucesso!']));
+        $response->getBody()->write((string)json_encode([
+            'message' => 'Password reset token generated',
+            'token' => $token,
+        ]));
         return $response->withHeader('Content-Type', 'application/json');
     }
 
-    /**
-     * @param Request $request
-     * @param Response $response
-     * @return Response
-     */
-    #[OA\Post(path: '/v1/auth/password/validate', summary: 'Validate Reset Token', tags: ['Auth'])]
-    #[OA\RequestBody(required: true, content: new OA\JsonContent(properties: [
-        new OA\Property(property: 'email', type: 'string'),
-        new OA\Property(property: 'token', type: 'string')
-    ]))]
-    #[OA\Response(response: 200, description: 'Token is valid')]
     public function validateResetToken(Request $request, Response $response): Response
     {
         $body = (array)$request->getParsedBody();
@@ -149,26 +98,14 @@ class AuthController extends BaseController
         return $response->withHeader('Content-Type', 'application/json');
     }
 
-    /**
-     * @param Request $request
-     * @param Response $response
-     * @return Response
-     */
-    #[OA\Post(path: '/v1/auth/password/change', summary: 'Change Password (Reset)', tags: ['Auth'])]
-    #[OA\RequestBody(required: true, content: new OA\JsonContent(properties: [
-        new OA\Property(property: 'email', type: 'string'),
-        new OA\Property(property: 'token', type: 'string'),
-        new OA\Property(property: 'password', type: 'string')
-    ]))]
-    #[OA\Response(response: 200, description: 'Password changed')]
-    public function resetPassword(Request $request, Response $response): Response
+    public function changePassword(Request $request, Response $response): Response
     {
         $body = (array)$request->getParsedBody();
         $email = (string)($body['email'] ?? '');
         $token = (string)($body['token'] ?? '');
         $password = (string)($body['password'] ?? '');
 
-        $this->authService->resetPassword($email, $token, $password);
+        $this->authService->changePassword($email, $token, $password);
 
         $response->getBody()->write((string)json_encode(['message' => 'Senha alterada com sucesso!']));
         return $response->withHeader('Content-Type', 'application/json');

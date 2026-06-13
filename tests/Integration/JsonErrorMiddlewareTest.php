@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 use App\Middleware\JsonErrorMiddleware;
-use App\Modules\Audit\ErrorLog;
 use Slim\Exception\HttpBadRequestException;
 use Slim\Psr7\Response;
 use Tests\WebTestCase;
@@ -19,27 +18,19 @@ class JsonErrorMiddlewareTest extends WebTestCase
     private $requestMock;
     /** @var \PHPUnit\Framework\MockObject\MockObject&RequestHandlerInterface */
     private $handlerMock;
-    /** @var \PHPUnit\Framework\MockObject\MockObject&\App\Infrastructure\Metrics\MetricService */
-    private $metricServiceMock;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $this->metricServiceMock = $this->createMock(\App\Infrastructure\Metrics\MetricService::class);
-        $errorAudit = new \App\Infrastructure\Audit\ErrorAuditService($logger);
-        $this->middleware = new JsonErrorMiddleware($errorAudit, $this->metricServiceMock);
-        
+        $this->middleware = new JsonErrorMiddleware();
+
         $uriMock = $this->createMock(\Psr\Http\Message\UriInterface::class);
         $uriMock->method('getPath')->willReturn('/test-path');
-        
+
         $this->requestMock = $this->createMock(ServerRequestInterface::class);
         $this->requestMock->method('getUri')->willReturn($uriMock);
         $this->requestMock->method('getMethod')->willReturn('GET');
-        $this->requestMock->method('getQueryParams')->willReturn([]);
-        $this->requestMock->method('getParsedBody')->willReturn([]);
-        $this->requestMock->method('getAttribute')->willReturn('123e4567-e89b-12d3-a456-426614174000');
-        
+
         $this->handlerMock = $this->createMock(RequestHandlerInterface::class);
     }
 
@@ -54,28 +45,19 @@ class JsonErrorMiddlewareTest extends WebTestCase
         $this->assertSame($response, $result);
     }
 
-    public function testProcessHandlesHttpExceptionAndAudits(): void
+    public function testProcessHandlesHttpException(): void
     {
         $exception = new HttpBadRequestException($this->requestMock, 'Bad Request Test');
         $this->handlerMock->expects($this->once())
             ->method('handle')
             ->willThrowException($exception);
 
-        $this->metricServiceMock->expects($this->once())
-            ->method('incrementCounter')
-            ->with('exceptions_total', ['type'], ['HttpBadRequestException']);
-
         $result = $this->middleware->process($this->requestMock, $this->handlerMock);
 
         $this->assertEquals(400, $result->getStatusCode());
-        
-        // Verify audit log entry
-        $log = ErrorLog::where('error_message', 'Bad Request Test')->first();
-        $this->assertNotNull($log);
-        $this->assertStringStartsWith('HTTP_ERROR', $log->source);
     }
 
-    public function testProcessHandlesValidationExceptionAndAudits(): void
+    public function testProcessHandlesValidationException(): void
     {
         $errors = ['field' => 'error message'];
         $exception = new \App\Core\Exceptions\ValidationException($errors);
@@ -83,40 +65,21 @@ class JsonErrorMiddlewareTest extends WebTestCase
             ->method('handle')
             ->willThrowException($exception);
 
-        $this->metricServiceMock->expects($this->once())
-            ->method('incrementCounter')
-            ->with('exceptions_total', ['type'], ['ValidationException']);
-
         $result = $this->middleware->process($this->requestMock, $this->handlerMock);
 
         $this->assertEquals(400, $result->getStatusCode());
-        
-        // Verify audit log entry
-        $log = ErrorLog::where('error_message', 'Validation Failed')->first();
-        $this->assertNotNull($log);
-        $this->assertStringStartsWith('VALIDATION_ERROR', $log->source);
-        $this->assertEquals($errors, $log->error_data['validation_errors']);
     }
 
-    public function testProcessHandlesGenericThrowableAndAudits(): void
+    public function testProcessHandlesGenericThrowable(): void
     {
         $exception = new \Exception('Unexpected Error', 501);
         $this->handlerMock->expects($this->once())
             ->method('handle')
             ->willThrowException($exception);
 
-        $this->metricServiceMock->expects($this->once())
-            ->method('incrementCounter')
-            ->with('exceptions_total', ['type'], ['Exception']);
-
         $result = $this->middleware->process($this->requestMock, $this->handlerMock);
 
         $this->assertEquals(501, $result->getStatusCode());
-        
-        // Verify audit log entry
-        $log = ErrorLog::where('error_message', 'Unexpected Error')->first();
-        $this->assertNotNull($log);
-        $this->assertStringStartsWith('SERVER_ERROR', $log->source);
     }
 
     public function testProcessHandlesDebugTrace(): void
@@ -127,13 +90,8 @@ class JsonErrorMiddlewareTest extends WebTestCase
             ->method('handle')
             ->willThrowException($exception);
 
-        $this->metricServiceMock->expects($this->once())
-            ->method('incrementCounter')
-            ->with('exceptions_total', ['type'], ['Exception']);
-
         $result = $this->middleware->process($this->requestMock, $this->handlerMock);
-        
-        /** @var array{success: bool, error: array{trace: array<mixed>}} $body */
+
         $body = json_decode((string)$result->getBody(), true);
         $this->assertArrayHasKey('trace', $body['error']);
 
