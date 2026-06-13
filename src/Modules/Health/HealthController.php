@@ -51,6 +51,7 @@ class HealthController
             ->withStatus(is_int($httpStatus) ? $httpStatus : 200);
     }
 
+    /** @return array<string, array<string, string>> */
     private function runChecks(): array
     {
         $checks = [];
@@ -59,6 +60,10 @@ class HealthController
         return $checks;
     }
 
+    /**
+     * @param array<string, array<string, string>> $checks
+     * @return array<string, mixed>
+     */
     private function buildResult(array $checks): array
     {
         $status = 'UP';
@@ -86,6 +91,7 @@ class HealthController
         ];
     }
 
+    /** @return array<string, string> */
     private function checkDatabase(): array
     {
         try {
@@ -96,6 +102,7 @@ class HealthController
         }
     }
 
+    /** @return array<string, string> */
     private function checkRedis(): array
     {
         try {

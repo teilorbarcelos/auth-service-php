@@ -21,6 +21,7 @@ class AuthService
     ) {
     }
 
+    /** @return array<string, mixed> */
     public function login(string $email, string $password): array
     {
         $this->validate(['email' => $email, 'password' => $password], [
@@ -49,6 +50,7 @@ class AuthService
         return $this->createAuthResponse($user, 'Login successful');
     }
 
+    /** @return array<string, mixed> */
     public function getMe(string $userId): array
     {
         $user = User::with(['role', 'role.features'])->find($userId);
@@ -59,6 +61,7 @@ class AuthService
         return $this->createAuthResponse($user, 'User found');
     }
 
+    /** @return array<string, mixed> */
     public function refreshToken(string $refreshToken): array
     {
         $claims = $this->jwtService->validateToken($refreshToken);
@@ -141,6 +144,7 @@ class AuthService
         UserSession::resetInstance();
     }
 
+    /** @return array<int, array<string, mixed>> */
     private function getFormattedPermissions(User $user): array
     {
         if (!$user->role instanceof \App\Modules\Role\Role)
@@ -187,6 +191,7 @@ class AuthService
         return $result;
     }
 
+    /** @return array<string, mixed> */
     private function createAuthResponse(User $user, string $message): array
     {
         $permissions = $this->getFormattedPermissions($user);
