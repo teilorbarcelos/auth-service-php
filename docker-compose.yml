@@ -11,13 +11,13 @@ services:
     environment:
       - SERVER_NAME=:80
       - FRANKENPHP_CONFIG=${FRANKEN_WORKER:+worker /app/public/worker.php 0}
-      - DB_HOST=db
+      - DB_HOST=host.docker.internal
       - DB_PORT=5432
       - DB_DRIVER=pgsql
       - DB_DATABASE=${DB_DATABASE:-backend_php_slim_db}
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgrespw}
-      - REDIS_HOST=redis
+      - REDIS_HOST=host.docker.internal
       - REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET}
       - APP_URL=${APP_URL:-http://localhost:8001}
@@ -25,13 +25,8 @@ services:
       - .:/app
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     entrypoint: ["/bin/bash", "/app/scripts/start.sh"]
-    depends_on:
-      - db
-      - redis
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - app-network
     develop:
       watch:
         - action: rebuild
@@ -40,32 +35,3 @@ services:
           path: ./composer.lock
         - action: rebuild
           path: ./Dockerfile
-
-  db:
-    image: postgres:15-alpine
-    container_name: auth_service_php_db
-    environment:
-      POSTGRES_DB: backend_php_slim_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespw
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    networks:
-      - app-network
-
-  redis:
-    image: redis:alpine
-    container_name: auth_service_php_redis
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-
-volumes:
-  pgdata:
-
-networks:
-  app-network:
-    driver: bridge
