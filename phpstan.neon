@@ -1,0 +1,11 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 9
+    paths:
+        - src
+    excludePaths:
+        - vendor
+    ignoreErrors:
+        - '#does not specify its types#'

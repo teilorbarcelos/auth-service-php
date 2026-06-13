@@ -1,0 +1,91 @@
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: backend_php_slim_app
+    ports:
+      - "8888:80"
+    env_file:
+      - .env
+    environment:
+      - SERVER_NAME=:80
+      - FRANKENPHP_CONFIG=${FRANKEN_WORKER:+worker /app/public/worker.php 0}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DRIVER=pgsql
+      - DB_DATABASE=${DB_DATABASE:-backend_php_slim_db}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgrespw}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_URL=${APP_URL:-http://localhost:8888}
+    volumes:
+      - .:/app
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    entrypoint: ["/bin/bash", "/app/scripts/start.sh"]
+    depends_on:
+      - db
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-network
+    develop:
+      watch:
+        - action: rebuild
+          path: ./composer.json
+        - action: rebuild
+          path: ./composer.lock
+        - action: rebuild
+          path: ./Dockerfile
+
+  db:
+    image: postgres:15-alpine
+    container_name: backend_php_slim_db
+    environment:
+      POSTGRES_DB: backend_php_slim_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespw
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    container_name: backend_php_slim_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: backend_php_slim_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+volumes:
+  pgdata:
+  rabbitmq_data:
+
+networks:
+  app-network:
+    driver: bridge

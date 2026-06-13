@@ -1,0 +1,13 @@
+{
+    skip_install_trust
+
+    frankenphp
+    {$FRANKENPHP_CONFIG}
+}
+
+:80 {
+    root * /app/public
+    encode zstd br gzip
+
+    php_server
+}

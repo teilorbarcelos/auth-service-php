@@ -1,0 +1,56 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Cannot call method create\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method delete\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method listAllItems\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method listItems\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method retrieveById\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method setStatus\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Cannot call method update\\(\\) on mixed\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Parameter \\#1 \\$string of method Psr\\\\Http\\\\Message\\\\StreamInterface\\:\\:write\\(\\) expects string, string\\|false given\\.$#"
+			count: 1
+			path: src/Core/BaseController.php
+
+		-
+			message: "#^Call to an undefined static method T of Illuminate\\\\Database\\\\Eloquent\\\\Model\\:\\:create\\(\\)\\.$#"
+			count: 1
+			path: src/Core/BaseRepository.php
+
+		-
+			message: "#^Method App\\\\Core\\\\BaseRepository\\:\\:searchPaginated\\(\\) should return array\\{items\\: array\\<T of Illuminate\\\\Database\\\\Eloquent\\\\Model\\>, total\\: int, page\\: int, size\\: int\\} but returns array\\{items\\: array, total\\: int, page\\: int, size\\: int\\}\\.$#"
+			count: 1
+			path: src/Core/BaseRepository.php
+
+		-
+			message: "#^Parameter \\#1 \\$name of method Lcobucci\\\\JWT\\\\Builder\\:\\:withClaim\\(\\) expects non\\-empty\\-string, string given\\.$#"
+			count: 1
+			path: src/Infrastructure/Auth/JwtService.php
